@@ -47,29 +47,3 @@ python -m http.server 8000
 Then open http://localhost:8000.
 
 Note: the service worker caches the shell aggressively. After editing files, bump the `CACHE` version in [sw.js](sw.js) and hard-refresh (Ctrl+Shift+R).
-
-## Deploy to GitHub Pages
-
-The app uses relative paths throughout, so it works from a subpath (`username.github.io/repo/`) with no configuration:
-
-1. Push the repo to GitHub
-2. Repo **Settings → Pages → Source**: select **Deploy from a branch**, branch `main`, folder `/ (root)`
-3. Wait for the first deploy, then visit `https://<username>.github.io/<repo>/`
-
-## Live data: the Worker proxy
-
-The transit operator's API is plain-HTTP and has no CORS headers, so the frontend can't call it directly from an HTTPS page. [worker/worker.js](worker/worker.js) runs on Cloudflare Workers (free tier) and:
-
-- accepts `GET /?line=l01` (strict allowlist, no open proxy)
-- calls the upstream API and extracts each bus's id, direction, coordinates and GPS timestamp
-- returns clean JSON with CORS headers and `Cache-Control: no-store`
-
-To deploy your own: create a Worker in the Cloudflare dashboard, paste in `worker/worker.js`, set `API_HOST` to the upstream hostname, then point `workerUrl` in each `lines/l0*.json` at your worker.
-
-## Adding or editing a line
-
-1. Draw the route in [geojson.io](https://geojson.io) (one LineString per direction) and save to `geojson/`
-2. Add station coordinates to `stations.json`
-3. Create `lines/l0X.json` with the line's color, station order and worker URL
-4. Register the line id in `js/app.js` (`LINE_IDS`) and in the worker's `LINES` map
-5. Add the new files to the `SHELL` list in `sw.js` and bump `CACHE`
