@@ -67,7 +67,7 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
 #splash.gone { opacity: 0; visibility: hidden; }
 .splash-bg {
   position: absolute; inset: 0;
-  background: url(../assets/splash.png) center/cover no-repeat;
+  background: url(../assets/splash.webp) center/cover no-repeat;
   opacity: .92; animation: zg-kenburns 14s ease-out forwards;
 }
 .splash-scrim {

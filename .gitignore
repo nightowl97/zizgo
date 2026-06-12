@@ -8,5 +8,8 @@ Desktop.ini
 .idea/
 *.swp
 
+# original full-res splash source (30MB; the app uses assets/splash.webp)
+assets/splash.png
+
 # logs
 *.log

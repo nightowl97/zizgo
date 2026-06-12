@@ -1,5 +1,5 @@
 /* ZizGo service worker: app shell cached, live data always from network */
-const CACHE = "zizgo-v28";
+const CACHE = "zizgo-v29";
 const SHELL = [
   "./", "index.html",
   "css/app.css", "js/app.js",
@@ -8,7 +8,7 @@ const SHELL = [
   "geojson/l01_aller.geojson", "geojson/l01_retour.geojson",
   "geojson/l02_aller.geojson", "geojson/l02_retour.geojson",
   "geojson/l03_aller.geojson", "geojson/l03_retour.geojson",
-  "assets/splash.png", "assets/icons/zizgo-mark.svg", "assets/icons/favicon.ico",
+  "assets/splash.webp", "assets/icons/zizgo-mark.svg", "assets/icons/favicon.ico",
   "manifest.webmanifest",
 ];
 
