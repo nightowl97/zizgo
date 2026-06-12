@@ -1,0 +1,18 @@
+{
+  "id": "l03",
+  "apiLineId": 53,
+  "name": "L03",
+  "workerUrl": "https://l03-bus-proxy.u8wl11fo9.workers.dev/",
+  "allerUrl": "geojson/l03_aller.geojson",
+  "retourUrl": "geojson/l03_retour.geojson",
+  "color": "#d6a23f",
+  "colorRgb": "214,162,63",
+  "sensDirMap": { "0": "→ My Mhamed", "1": "→ Tizegdalt" },
+  "stations": [
+    "My Mhamed", "Keba", "Timzoughine", "Sarghine", "Lot Oued Lahmar",
+    "Ain El Ati", "Hay Al massira",
+    "Lot Baladia", "Souk Hebdomadaires", "Gare Routière", "Marché",
+    "Touchka", "CHU", "ISTA", "Ksar El jadid", "Rahba", "Tighourine",
+    "Tazouka", "Mochklal", "Tizegdalt"
+  ]
+}

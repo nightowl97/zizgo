@@ -1,0 +1,20 @@
+{
+  "id": "l02",
+  "apiLineId": 48,
+  "name": "L02",
+  "workerUrl": "https://l02-bus-proxy.u8wl11fo9.workers.dev/",
+  "allerUrl": "geojson/l02_aller.geojson",
+  "retourUrl": "geojson/l02_retour.geojson",
+  "color": "#c96f3c",
+  "colorRgb": "201,111,60",
+  "sensDirMap": { "0": "→ Omrane", "1": "→ Ahibous" },
+  "stations": [
+    "Omrane", "Ould Tkir", "Tinnite", "Lot Safaa", "Lot Oued Eddahab",
+    "Ait Ba Mouha", "Marjane", "Enkebi", "Aain El Ati", "Amazouj",
+    "Lot Filaha", "Université", "Azemour El jadid", "Targa El jadida",
+    "Boutalamine", "ANAPEC", "Ocean", "Bachaouia", "Grande Salle", "Wilaya",
+    "Marché", "Gare Routière", "Souk Hebdomadaires", "Lot Baladia",
+    "Hay Al massira", "Ain El Ati", "Hay Nahda", "Beni Fouss",
+    "Garaison FAR", "Beni Mhali", "Asrir", "Ahibous"
+  ]
+}

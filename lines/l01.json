@@ -1,0 +1,18 @@
+{
+  "id": "l01",
+  "apiLineId": 47,
+  "name": "L01",
+  "workerUrl": "https://l01-bus-proxy.u8wl11fo9.workers.dev/",
+  "allerUrl": "geojson/l01_aller.geojson",
+  "retourUrl": "geojson/l01_retour.geojson",
+  "color": "#3f8a63",
+  "colorRgb": "63,138,99",
+  "sensDirMap": { "0": "→ Amazouj", "1": "→ Meski" },
+  "stations": [
+    "Amazouj", "Université", "Azemour El jadid", "Targa El jadida",
+    "Boutalamine", "Sijlimassa", "Gare Routière", "Marché", "CHU",
+    "Ouled El haj", "Zaouia", "Ait massoud", "Lakssiba", "Taourirte",
+    "Si Bouabdellah", "Tittaf", "Ouled M’hamed", "Beni Moussa",
+    "Tazenakht", "Meski"
+  ]
+}

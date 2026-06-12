@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ZizGo - Bus d'Errachidia en direct</title>
+<meta name="description" content="Suivez les bus d'Errachidia en temps réel, le long du Ziz." />
+<meta name="theme-color" content="#141009" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="assets/icons/favicon.ico" sizes="48x48" />
+<link rel="icon" href="assets/icons/zizgo-mark.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+Tifinagh&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+<!-- ── Splash ─────────────────────────────────────────────── -->
+<div id="splash">
+  <div class="splash-bg"></div>
+  <div class="splash-scrim"></div>
+
+  <!-- desktop-only top bar -->
+  <div class="splash-topbar">
+    <div class="topbar-brand">
+      <img class="logo" src="assets/icons/zizgo-mark.svg" width="34" height="34" alt="" aria-hidden="true" />
+      <span class="wordmark md">Ziz<span class="wm-accent">Go</span></span>
+    </div>
+    <div class="live-pill">
+      <span class="ping"><span class="ping-core"></span><span class="ping-wave"></span></span>
+      <span class="live-label">EN DIRECT</span>
+    </div>
+  </div>
+
+  <div class="splash-content">
+    <div class="splash-brand">
+      <img class="logo" src="assets/icons/zizgo-mark.svg" width="52" height="52" alt="ZizGo" />
+      <span class="wordmark">Ziz<span class="wm-accent">Go</span><small class="wm-tif">ⵣⵉⵣ</small></span>
+    </div>
+    <div class="splash-eyebrow">Errachidia <span class="eb-rule"></span> <span class="eb-tif">ⵕⵕⴰⵛⵉⴷⵢⵢⴰ</span></div>
+    <h1>Le réseau de bus d'Errachidia, <span class="hl">en direct.</span></h1>
+    <p>Suivez chaque bus le long du Ziz, minute par minute.</p>
+    <div class="splash-action">
+      <div id="splash-loading">
+        <span class="shimmer"></span>
+        <span class="loading-label">Connexion au réseau…</span>
+      </div>
+      <button id="enter-btn" hidden>
+        Voir la carte
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M5 12 H19 M13 6 L19 12 L13 18"/></svg>
+      </button>
+    </div>
+    <!-- desktop-only line preview chips, filled by app.js -->
+    <div id="splash-lines"></div>
+  </div>
+</div>
+
+<!-- ── App ────────────────────────────────────────────────── -->
+<div id="app" hidden>
+
+  <!-- desktop-only left rail -->
+  <aside id="rail">
+    <div class="rail-head">
+      <div class="rail-head-top">
+        <div class="topbar-brand">
+          <img class="logo" src="assets/icons/zizgo-mark.svg" width="30" height="30" alt="" aria-hidden="true" />
+          <span class="wordmark sm">Ziz<span class="wm-accent">Go</span></span>
+        </div>
+        <div class="live-pill">
+          <span class="ping"><span class="ping-core"></span><span class="ping-wave"></span></span>
+          <span class="live-label">EN DIRECT</span>
+          <span class="live-count">· 0 bus</span>
+        </div>
+      </div>
+      <div class="rail-search">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 L21 21"/></svg>
+        <input id="rail-search" type="search" placeholder="Rechercher une ligne ou un arrêt" autocomplete="off" />
+      </div>
+    </div>
+    <div class="rail-body">
+      <div id="rail-detail" hidden></div>
+      <div class="rail-lines-head"><span>Lignes</span><span id="rail-total">0 bus actifs</span></div>
+      <div id="rail-lines"></div>
+    </div>
+    <div class="rail-foot">Positions GPS · rafraîchies toutes les 10 s</div>
+  </aside>
+
+  <div id="screens">
+
+    <!-- Carte -->
+    <section id="screen-map" class="screen">
+      <div id="map"></div>
+
+      <div class="map-topbar">
+        <div class="topbar-brand">
+          <img class="logo" src="assets/icons/zizgo-mark.svg" width="30" height="30" alt="" aria-hidden="true" />
+          <span class="wordmark sm">Ziz<span class="wm-accent">Go</span></span>
+        </div>
+        <div id="live-pill" class="live-pill">
+          <span class="ping"><span class="ping-core"></span><span class="ping-wave"></span></span>
+          <span id="live-label" class="live-label">EN DIRECT</span>
+          <span id="live-count" class="live-count">· 0 bus</span>
+        </div>
+      </div>
+
+      <div class="zoom-ctl">
+        <button id="zoom-in" aria-label="Zoomer">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 6 V18 M6 12 H18"/></svg>
+        </button>
+        <button id="zoom-out" aria-label="Dézoomer">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 12 H18"/></svg>
+        </button>
+      </div>
+      <button id="theme-btn" aria-label="Basculer le fond de carte">
+        <svg class="ic-moon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8 A9 9 0 1 1 11.2 3 A7 7 0 0 0 21 12.8 Z"/></svg>
+        <svg class="ic-sun" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2 V4 M12 20 V22 M4.9 4.9 L6.3 6.3 M17.7 17.7 L19.1 19.1 M2 12 H4 M20 12 H22 M4.9 19.1 L6.3 17.7 M17.7 6.3 L19.1 4.9"/></svg>
+      </button>
+      <button id="locate-btn" aria-label="Ma position">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="10" r="3"/><path d="M12 2 C7 2 4 6 4 10 C4 16 12 22 12 22 C12 22 20 16 20 10 C20 6 17 2 12 2 Z"/>
+        </svg>
+      </button>
+
+      <!-- desktop-only map overlays -->
+      <div id="map-context">
+        <svg class="mc-pin" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="10" r="3"/><path d="M12 2 C7 2 4 6 4 10 C4 16 12 22 12 22 C12 22 20 16 20 10 C20 6 17 2 12 2 Z"/>
+        </svg>
+        <b>Errachidia</b>
+        <span class="mc-div"></span>
+        <span id="mc-sub">Réseau complet</span>
+      </div>
+      <div id="map-legend"></div>
+
+      <div id="bus-callout" hidden></div>
+
+      <div id="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <span id="sheet-title">Lignes en service</span>
+          <span id="sheet-sub"></span>
+        </div>
+        <div id="line-chips" class="line-chips"></div>
+      </div>
+    </section>
+
+    <!-- Lignes -->
+    <section id="screen-lines" class="screen" hidden>
+      <div class="hero">
+        <div class="hero-img" style="background-image:url(assets/splash.png)"></div>
+        <div class="hero-scrim"></div>
+        <div class="hero-text">
+          <div class="eyebrow">Errachidia · ⵕⵕⴰⵛⵉⴷⵢⵢⴰ</div>
+          <h1>Lignes du réseau</h1>
+          <p>Les lignes urbaines relient les quartiers, le campus et l'oasis de Meski.</p>
+        </div>
+      </div>
+      <div id="line-cards" class="line-cards"></div>
+    </section>
+
+    <!-- Infos -->
+    <section id="screen-info" class="screen" hidden>
+      <div class="hero hero-sm">
+        <div class="hero-img" style="background-image:url(assets/splash.png); background-position:center 35%"></div>
+        <div class="hero-scrim"></div>
+        <div class="hero-text hero-brand">
+          <img class="logo" src="assets/icons/zizgo-mark.svg" width="46" height="46" alt="" aria-hidden="true" />
+          <span class="wordmark">Ziz<span class="wm-accent">Go</span></span>
+        </div>
+      </div>
+      <div class="info-body">
+        <p class="lead">ZizGo suit en temps réel les bus d'Errachidia, d'un quartier à l'autre,
+        le long du Ziz. Pensé pour être consulté en quelques secondes, à l'arrêt comme dans le bus.</p>
+        <div id="info-stats" class="stats"></div>
+        <div class="eyebrow">L'identité</div>
+        <p class="muted">Le Ziz est un fil vert qui traverse l'ocre du désert. Le logo reprend ce geste :
+        une ligne sinueuse, à la fois rivière et trajet, ponctuée d'un arrêt vivant.
+        Disponible dans le navigateur et en application Android.</p>
+        <div class="eyebrow">Les données</div>
+        <p class="muted">Positions mises à jour toutes les 10 secondes via les balises GPS embarquées.
+        Horaires donnés à titre indicatif.</p>
+        <div class="info-footer">
+          <span>ZizGo</span>
+          <span class="tifinagh">ⵣⵉⵣ</span>
+          <span dir="rtl">زيز</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- single bottom ad banner: fill in your AdSense unit, then remove [hidden] -->
+  <div id="ad-banner" hidden></div>
+
+  <nav id="bottom-nav">
+    <button data-tab="map" class="on">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 L3 6 V20 L9 18 L15 20 L21 18 V4 L15 6 Z"/><path d="M9 4 V18 M15 6 V20"/></svg>
+      <span>Carte</span>
+    </button>
+    <button data-tab="lines">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="7" r="2"/><circle cx="6" cy="17" r="2"/><path d="M6 9 V15"/><path d="M11 7 H20 M11 12 H20 M11 17 H17"/></svg>
+      <span>Lignes</span>
+    </button>
+    <button data-tab="info">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11 V16 M12 8 H12.01"/></svg>
+      <span>Infos</span>
+    </button>
+  </nav>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator)
+    navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
