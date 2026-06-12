@@ -143,7 +143,7 @@ function endpointsOf(LINE) {
       }
     if (activeSelection) {
       const m = busMarkers.get(activeSelection.busKey);
-      if (m) selectLine(activeSelection.lineId, m._busDir, m._busPos);
+      if (m) selectLine(activeSelection.lineId, m._busDir, m._busPosCur ?? m._busPos);
     } else if (selectedLineId) {
       selectLine(selectedLineId, null);
     }
@@ -172,6 +172,7 @@ function endpointsOf(LINE) {
   const routePts = {};
   const busMarkers = new Map();
   let highlightLayers = [];
+  let splitRef = null;          // live refs to the past/future halves of a bus highlight
   let activeSelection = null;   // { busKey, lineId }
   let selectedLineId = null;    // chip selection
 
@@ -192,6 +193,7 @@ function endpointsOf(LINE) {
   function selectLine(lineId, dir, busPos) {
     highlightLayers.forEach(l => map.removeLayer(l));
     highlightLayers = [];
+    splitRef = null;
 
     for (const LINE of LINES) {
       const dirs = routeLayers[LINE.id] ?? {};
@@ -206,16 +208,21 @@ function endpointsOf(LINE) {
           if (pts?.length >= 2) {
             addGlow(pts, LINE.color);
             const idx = Math.max(0, Math.min(busPos.segIdx, pts.length - 2));
-            const past = ptsToLatLng(pts.slice(0, idx + 1));
-            const future = ptsToLatLng(pts.slice(idx));
-            if (past.length >= 2) highlightLayers.push(
+            // split at the bus's projected point, not the nearest node: long straight
+            // segments have nodes only at their ends, so a node split would paint
+            // part of the bus's own segment with the wrong shade
+            const past = ptsToLatLng([...pts.slice(0, idx + 1), busPos]);
+            const future = ptsToLatLng([busPos, ...pts.slice(idx + 1)]);
+            const pastLayers = [
               L.polyline(past, routeStyle(12, 0.35, CASING)).addTo(map),
-              L.polyline(past, routeStyle(7, 0.3, LINE.color)).addTo(map)
-            );
-            if (future.length >= 2) highlightLayers.push(
+              L.polyline(past, routeStyle(7, 0.3, LINE.color)).addTo(map),
+            ];
+            const futureLayers = [
               L.polyline(future, routeStyle(12, 0.8, CASING)).addTo(map),
-              L.polyline(future, routeStyle(7, 0.95, LINE.color)).addTo(map)
-            );
+              L.polyline(future, routeStyle(7, 0.95, LINE.color)).addTo(map),
+            ];
+            highlightLayers.push(...pastLayers, ...futureLayers);
+            splitRef = { pts, pastLayers, futureLayers };
           }
           const opp = dir === "aller" ? "retour" : "aller";
           const oppPts = routePts[LINE.id]?.[opp];
@@ -244,12 +251,29 @@ function endpointsOf(LINE) {
       if (key.startsWith(`${lineId}:`)) m.setOpacity(1);
   }
 
+  // move the past/future boundary without rebuilding the highlight layers;
+  // called every animation frame while the selected bus slides, so throttled
+  let splitLastAt = 0;
+  function updateSplit(pos, force) {
+    if (!splitRef || pos?.segIdx == null) return;
+    const now = performance.now();
+    if (!force && now - splitLastAt < 120) return;
+    splitLastAt = now;
+    const { pts, pastLayers, futureLayers } = splitRef;
+    const idx = Math.max(0, Math.min(pos.segIdx, pts.length - 2));
+    const past = ptsToLatLng([...pts.slice(0, idx + 1), pos]);
+    const future = ptsToLatLng([pos, ...pts.slice(idx + 1)]);
+    pastLayers.forEach(l => l.setLatLngs(past));
+    futureLayers.forEach(l => l.setLatLngs(future));
+  }
+
   function resetSelection() {
     activeSelection = null;
     selectedLineId = null;
     hideCallout();
     highlightLayers.forEach(l => map.removeLayer(l));
     highlightLayers = [];
+    splitRef = null;
     for (const [, m] of busMarkers) m.setOpacity(1);
     for (const LINE of LINES) {
       const dirs = routeLayers[LINE.id] ?? {};
@@ -317,8 +341,25 @@ function endpointsOf(LINE) {
         const p = stationPos.get(name);
         return p ? progressOf(snapToLine(pts, p.lat, p.lng)) : null;
       });
-      lineProg[LINE.id][dir] = { st, progressOf };
+      lineProg[LINE.id][dir] = { st, progressOf, pts, cum };
     }
+  }
+
+  // inverse of progressOf: the point sitting at a given distance along the line
+  function pointAtProgress(lp, prog) {
+    const { pts, cum } = lp;
+    const p = Math.max(0, Math.min(prog, cum[cum.length - 1]));
+    let lo = 0, hi = cum.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (cum[mid] <= p) lo = mid; else hi = mid;
+    }
+    const t = (p - cum[lo]) / (cum[hi] - cum[lo] || 1);
+    return {
+      lat: pts[lo].lat + (pts[hi].lat - pts[lo].lat) * t,
+      lng: pts[lo].lng + (pts[hi].lng - pts[lo].lng) * t,
+      segIdx: lo,
+    };
   }
 
   // where along the displayed station list a bus sits: rows i→j at fraction f
@@ -436,19 +477,42 @@ function endpointsOf(LINE) {
     if (m._icon)
       L.DomUtil.setPosition(m._icon, map.project([lat, lng])._subtract(map.getPixelOrigin()));
   }
-  function slideMarkerTo(m, to) {
+  function slideMarkerTo(m, lineId, dir, toPos) {
     if (m._slideRaf) cancelAnimationFrame(m._slideRaf);
     const from = m.getLatLng();
     // don't tween implausible jumps (vehicle reassigned, long GPS gap)
-    if (Math.abs(to.lat - from.lat) + Math.abs(to.lng - from.lng) > 0.02) {
-      m.setLatLng(to);
+    if (Math.abs(toPos.lat - from.lat) + Math.abs(toPos.lng - from.lng) > 0.02) {
+      m.setLatLng([toPos.lat, toPos.lng]);
+      m._busPosCur = toPos;
+      if (activeSelection?.busKey === m._busKey) updateSplit(toPos, true);
       return;
     }
     const start = performance.now();
+    const lp = lineProg[lineId]?.[dir];
+    if (lp) {
+      // tween distance-along-route, not lat/lng: the marker follows curves
+      // instead of cutting across them, and the past/future split rides along
+      const fromProg = lp.progressOf(snapToLine(lp.pts, from.lat, from.lng));
+      const toProg = lp.progressOf(toPos);
+      m._busPosCur = pointAtProgress(lp, fromProg);
+      const step = now => {
+        const k = Math.min(1, (now - start) / SLIDE_MS);
+        const e = k * k * (3 - 2 * k); // smoothstep
+        const p = k < 1 ? pointAtProgress(lp, fromProg + (toProg - fromProg) * e) : toPos;
+        setLatLngSubpixel(m, p.lat, p.lng);
+        m._busPosCur = p;
+        if (activeSelection?.busKey === m._busKey) updateSplit(p, k >= 1);
+        m._slideRaf = k < 1 ? requestAnimationFrame(step) : null;
+      };
+      m._slideRaf = requestAnimationFrame(step);
+      return;
+    }
+    // no progress table for this direction: straight tween fallback
     const step = now => {
       const k = Math.min(1, (now - start) / SLIDE_MS);
       const e = k * k * (3 - 2 * k); // smoothstep
-      setLatLngSubpixel(m, from.lat + (to.lat - from.lat) * e, from.lng + (to.lng - from.lng) * e);
+      setLatLngSubpixel(m, from.lat + (toPos.lat - from.lat) * e, from.lng + (toPos.lng - from.lng) * e);
+      if (k >= 1) m._busPosCur = toPos;
       m._slideRaf = k < 1 ? requestAnimationFrame(step) : null;
     };
     m._slideRaf = requestAnimationFrame(step);
@@ -478,16 +542,17 @@ function endpointsOf(LINE) {
 
           if (busMarkers.has(key)) {
             const m = busMarkers.get(key);
-            slideMarkerTo(m, ll);
             m._busPos = pos; m._busDir = dir; m._busData = b;
+            slideMarkerTo(m, LINE.id, dir, pos);
           } else {
             const m = L.marker(ll, { icon: busIcon(LINE.color, LINE.colorRgb), zIndexOffset: 1000 }).addTo(map);
             m._busPos = pos; m._busDir = dir; m._busData = b;
+            m._busKey = key; m._busPosCur = pos;
             m.on("click", e => {
               L.DomEvent.stopPropagation(e);
               activeSelection = { busKey: key, lineId: LINE.id };
               selectedLineId = LINE.id;
-              selectLine(LINE.id, m._busDir, m._busPos);
+              selectLine(LINE.id, m._busDir, m._busPosCur ?? m._busPos);
               showCallout(LINE, m._busData);
               syncChips(); syncSheetHead();
             });
@@ -508,7 +573,7 @@ function endpointsOf(LINE) {
     if (activeSelection) {
       const m = busMarkers.get(activeSelection.busKey);
       if (m) {
-        selectLine(activeSelection.lineId, m._busDir, m._busPos);
+        selectLine(activeSelection.lineId, m._busDir, m._busPosCur ?? m._busPos);
         const LINE = LINES.find(L_ => L_.id === activeSelection.lineId);
         if (LINE) showCallout(LINE, m._busData);
       } else resetSelection();
