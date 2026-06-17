@@ -6,18 +6,40 @@
   --accent:      #d4923f;
   --accent-soft: rgba(212,146,63,.18);
   --green:       #3f8a63;
-  --ink:         #f3e9d8;
-  --ink-50:      rgba(243,233,216,.5);
-  --ink-12:      rgba(243,233,216,.12);
-  --ink-08:      rgba(243,233,216,.08);
+  --ink-rgb:     243,233,216;            /* warm cream text */
+  --glass-rgb:   23,18,11;               /* warm-dark frosted panel base */
+  --ink:         rgb(var(--ink-rgb));
+  --ink-50:      rgba(var(--ink-rgb),.5);
+  --ink-12:      rgba(var(--ink-rgb),.12);
+  --ink-08:      rgba(var(--ink-rgb),.08);
   --bg:          #141009;
   --bg-2:        #17120b;
-  --chrome:      rgba(26,20,12,.85);
-  --chrome-line: rgba(243,233,216,.12);
+  --chrome:      rgba(var(--glass-rgb),.85);
+  --chrome-line: rgba(var(--ink-rgb),.12);
   --cream:       #fbf3e6;
   --font:        'Space Grotesk', system-ui, sans-serif;
   --nav-h:       60px;
   --safe-b:      env(safe-area-inset-bottom, 0px);
+}
+
+/* light interface: flip the warm-dark chrome to a warm-light palette.
+   the same .dark-map class that drives the basemap drives the chrome, so the
+   theme toggle switches both. scoped off .dark-map so the splash (which has its
+   own dark literals) is untouched.
+   NB: --ink/--chrome must be re-derived here, not just the triplets. var() inside
+   a custom property resolves where the property is DECLARED, so the :root copies
+   are frozen with the dark triplets; overriding only --ink-rgb wouldn't flip them. */
+body:not(.dark-map) {
+  --ink-rgb:     54,40,23;               /* warm-dark text on sand */
+  --glass-rgb:   252,247,238;            /* frosted near-white panels */
+  --ink:         rgb(var(--ink-rgb));
+  --ink-50:      rgba(var(--ink-rgb),.5);
+  --ink-12:      rgba(var(--ink-rgb),.12);
+  --ink-08:      rgba(var(--ink-rgb),.08);
+  --bg:          #e6dac2;
+  --bg-2:        #f1e7d4;
+  --chrome:      rgba(var(--glass-rgb),.85);
+  --chrome-line: rgba(var(--ink-rgb),.16);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -63,6 +85,13 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
   display: flex; flex-direction: column; justify-content: flex-end;
   background: #120d07; overflow: hidden;
   transition: opacity .5s ease, visibility .5s;
+  /* the splash always shows over the dark hero photo; pin the dark palette so a
+     returning light-theme user still gets cream text here (the body is light).
+     --ink re-derived too (see note on the light override). */
+  --ink-rgb: 243,233,216;
+  --glass-rgb: 23,18,11;
+  --ink: rgb(var(--ink-rgb));
+  color: var(--ink);
 }
 #splash.gone { opacity: 0; visibility: hidden; }
 .splash-bg {
@@ -116,7 +145,7 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
 /* ── bottom nav ───────────────────────────────────── */
 #bottom-nav {
   display: flex; flex-shrink: 0;
-  background: rgba(18,13,7,.96);
+  background: rgba(var(--glass-rgb),.96);
   border-top: 1px solid var(--chrome-line);
   padding: 9px 8px calc(11px + var(--safe-b));
 }
@@ -134,12 +163,17 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
 /* ── map + warm tile treatment ────────────────────── */
 #map { position: absolute; inset: 0; background: #e7d9bf; z-index: 0; }
 /* warm tint per tile, not on the pane: a pane-level filter re-rasterizes the whole
-   viewport on every pan frame and tile fade; per-tile output gets GPU-cached */
-.leaflet-tile-pane .leaflet-tile,
-.leaflet-boost-pane .leaflet-tile { filter: sepia(.32) saturate(.82) brightness(1.03) hue-rotate(-6deg); }
-/* light-mode contrast boost: the map multiplied by itself, whites stay white,
-   the pale background and roads pull apart (cheap GPU blend, not a filter).
-   The extra saturate/brightness on the boost copy deepens the product further. */
+   viewport on every pan frame and tile fade; per-tile output gets GPU-cached.
+   light map: the base copy and a second multiply copy (.leaflet-boost-pane) are
+   both contrast-boosted, so the squaring deepens the sand background and blocks
+   while the near-white roads stay bright, pulling them apart. dark map keeps the
+   raw 'dark matter' tiles (filter cleared below). */
+body:not(.dark-map) .leaflet-tile-pane .leaflet-tile {
+  filter: sepia(.30) saturate(1.05) brightness(.95) contrast(1.2) hue-rotate(-7deg);
+}
+body:not(.dark-map) .leaflet-boost-pane .leaflet-tile {
+  filter: sepia(.14) saturate(1.18) brightness(.86) contrast(1.42) hue-rotate(-7deg);
+}
 .leaflet-boost-pane { mix-blend-mode: multiply; opacity: 1; }
 
 /* soft halo for highlighted routes; content changes only on selection */
@@ -151,13 +185,12 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
 
 /* themed station tooltips */
 .leaflet-tooltip {
-  background: rgba(26,20,12,.92); color: var(--ink);
+  background: rgba(var(--glass-rgb),.92); color: var(--ink);
   border: 1px solid var(--chrome-line); border-radius: 8px;
   font: 500 12px/1.3 var(--font); padding: 5px 9px;
   box-shadow: 0 6px 18px -6px rgba(0,0,0,.55);
 }
-.leaflet-tooltip-top::before { border-top-color: rgba(26,20,12,.92); }
-.leaflet-boost-pane .leaflet-tile { filter: sepia(.32) saturate(1.1) brightness(.96) hue-rotate(-6deg); }
+.leaflet-tooltip-top::before { border-top-color: rgba(var(--glass-rgb),.92); }
 .leaflet-control-attribution {
   background: rgba(231,217,191,.8) !important; color: #9a8a6c !important;
   font: 10px/1.4 var(--font) !important;
@@ -168,7 +201,7 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
   position: absolute; top: 0; left: 0; right: 0; z-index: 500;
   display: flex; align-items: flex-start; justify-content: space-between;
   padding: 14px 16px 30px; pointer-events: none;
-  background: linear-gradient(180deg, rgba(18,13,7,.6), rgba(18,13,7,0));
+  background: linear-gradient(180deg, rgba(var(--glass-rgb),.6), rgba(var(--glass-rgb),0));
 }
 .topbar-brand { display: flex; align-items: center; gap: 9px; pointer-events: auto; }
 .live-pill {
@@ -194,11 +227,11 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
   width: 40px; height: 40px; display: grid; place-items: center; color: var(--ink);
   transition: background .2s ease;
 }
-.zoom-ctl button:hover { background: rgba(243,233,216,.08); }
-.zoom-ctl button:active { background: rgba(243,233,216,.14); }
-.zoom-ctl button + button { border-top: 1px solid rgba(243,233,216,.1); }
+.zoom-ctl button:hover { background: rgba(var(--ink-rgb),.08); }
+.zoom-ctl button:active { background: rgba(var(--ink-rgb),.14); }
+.zoom-ctl button + button { border-top: 1px solid rgba(var(--ink-rgb),.1); }
 #locate-btn, #theme-btn { transition: border-color .2s ease, transform .15s ease; }
-#locate-btn:hover, #theme-btn:hover { border-color: rgba(243,233,216,.3); }
+#locate-btn:hover, #theme-btn:hover { border-color: rgba(var(--ink-rgb),.3); }
 #locate-btn:active, #theme-btn:active { transform: scale(.94); }
 
 #locate-btn {
@@ -265,7 +298,7 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
 /* ── bus callout ──────────────────────────────────── */
 #bus-callout {
   position: absolute; left: 14px; right: 14px; bottom: 158px; z-index: 600;
-  background: rgba(26,20,12,.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  background: rgba(var(--glass-rgb),.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--chrome-line); border-radius: 18px; padding: 14px 16px;
   box-shadow: 0 18px 44px -14px rgba(0,0,0,.7);
   animation: zg-rise .32s cubic-bezier(.2,.8,.2,1);
@@ -291,13 +324,13 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
 /* ── bottom sheet (line chips) ────────────────────── */
 #bottom-sheet {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 550;
-  background: rgba(23,18,11,.94); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-  border-top: 1px solid rgba(243,233,216,.1); border-radius: 22px 22px 0 0;
+  background: rgba(var(--glass-rgb),.94); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  border-top: 1px solid rgba(var(--ink-rgb),.1); border-radius: 22px 22px 0 0;
   box-shadow: 0 -16px 40px -18px rgba(0,0,0,.6);
   padding: 10px 16px 14px;
 }
 .sheet-handle {
-  width: 38px; height: 4px; border-radius: 4px; background: rgba(243,233,216,.22);
+  width: 38px; height: 4px; border-radius: 4px; background: rgba(var(--ink-rgb),.22);
   cursor: grab; touch-action: none;
   /* enlarge the grab target beyond the visible pill, keeping its visual position */
   box-sizing: content-box; padding: 8px 40px; background-clip: content-box;
@@ -326,10 +359,10 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
 .chip {
   flex-shrink: 0; display: flex; align-items: center; gap: 8px;
   padding: 9px 13px 9px 10px; border-radius: 13px;
-  background: rgba(243,233,216,.06); border: 1px solid rgba(243,233,216,.1);
+  background: rgba(var(--ink-rgb),.06); border: 1px solid rgba(var(--ink-rgb),.1);
   transition: background .2s, border-color .2s, transform .15s ease;
 }
-.chip:not(.sel):hover { background: rgba(243,233,216,.1); }
+.chip:not(.sel):hover { background: rgba(var(--ink-rgb),.1); }
 .chip:active { transform: scale(.97); }
 .chip.sel { background: var(--cc); border-color: var(--cc); }
 .chip-badge {
@@ -348,7 +381,7 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
 .hero-sm { height: 150px; }
 .hero-img { position: absolute; inset: 0; background-size: cover; background-position: center 60%; opacity: .55; }
 .hero-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(23,18,11,.35), rgba(23,18,11,.96)); }
-.hero-text { position: absolute; left: 20px; right: 20px; bottom: 18px; }
+.hero-text { position: absolute; left: 20px; right: 20px; bottom: 18px; color: #f3e9d8; }
 .hero-brand { display: flex; align-items: center; gap: 12px; bottom: 16px; }
 .hero-text h1 { font: 600 27px/1 var(--font); letter-spacing: -.01em; }
 .hero-text p { font: 400 13px/1.4 var(--font); margin-top: 8px; opacity: .6; max-width: 280px; }
@@ -362,10 +395,10 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
 .line-card {
   text-align: left; display: flex; align-items: stretch; gap: 14px;
   padding: 15px 16px 15px 14px; border-radius: 17px; position: relative; overflow: hidden;
-  background: rgba(243,233,216,.04); border: 1px solid rgba(243,233,216,.09); color: var(--ink);
+  background: rgba(var(--ink-rgb),.04); border: 1px solid rgba(var(--ink-rgb),.09); color: var(--ink);
   transition: background .2s, border-color .2s, transform .15s ease;
 }
-.line-card:hover { background: rgba(243,233,216,.07); border-color: rgba(243,233,216,.16); }
+.line-card:hover { background: rgba(var(--ink-rgb),.07); border-color: rgba(var(--ink-rgb),.16); }
 .line-card:active { transform: scale(.985); }
 .line-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--cc); }
 .lc-badge {
@@ -381,7 +414,7 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
 .lc-arrow { align-self: center; opacity: .4; }
 .lines-note {
   margin-top: 8px; padding: 16px 18px; border-radius: 17px;
-  border: 1px dashed rgba(243,233,216,.16); background: rgba(243,233,216,.02);
+  border: 1px dashed rgba(var(--ink-rgb),.16); background: rgba(var(--ink-rgb),.02);
 }
 .lines-note b { display: block; font: 600 13.5px/1.3 var(--font); margin-bottom: 5px; }
 .lines-note span { font: 400 12.5px/1.5 var(--font); opacity: .55; }
@@ -393,13 +426,13 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; margin-bottom: 22px; }
 .stat {
   padding: 15px 16px; border-radius: 15px;
-  background: rgba(243,233,216,.04); border: 1px solid rgba(243,233,216,.09);
+  background: rgba(var(--ink-rgb),.04); border: 1px solid rgba(var(--ink-rgb),.09);
 }
 .stat b { display: block; font: 600 26px/1 var(--font); color: var(--accent); }
 .stat span { display: block; font: 400 12px/1 var(--font); opacity: .55; margin-top: 6px; }
 .info-footer {
   display: flex; gap: 18px; align-items: center; padding: 16px 0 4px;
-  border-top: 1px solid rgba(243,233,216,.1); font: 400 13px/1 var(--font); opacity: .5;
+  border-top: 1px solid rgba(var(--ink-rgb),.1); font: 400 13px/1 var(--font); opacity: .5;
 }
 .tifinagh { font-family: 'Noto Sans Tifinagh', sans-serif; font-size: 15px; letter-spacing: .1em; }
 
@@ -438,15 +471,15 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
 /* left rail (hidden on mobile) */
 #rail {
   display: none; width: 404px; flex-shrink: 0; flex-direction: column; min-height: 0;
-  background: rgba(20,15,9,.96); border-right: 1px solid rgba(243,233,216,.09); z-index: 5;
+  background: rgba(var(--glass-rgb),.96); border-right: 1px solid rgba(var(--ink-rgb),.09); z-index: 5;
 }
-.rail-head { padding: 20px 20px 16px; border-bottom: 1px solid rgba(243,233,216,.07); }
+.rail-head { padding: 20px 20px 16px; border-bottom: 1px solid rgba(var(--ink-rgb),.07); }
 .rail-head-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .rail-search { position: relative; }
 .rail-search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); opacity: .4; pointer-events: none; }
 .rail-search input {
   width: 100%; padding: 12px 14px 12px 40px; border-radius: 12px;
-  background: rgba(243,233,216,.06); border: 1px solid rgba(243,233,216,.1);
+  background: rgba(var(--ink-rgb),.06); border: 1px solid rgba(var(--ink-rgb),.1);
   color: var(--ink); font: 400 14px/1 var(--font); outline: none;
   -webkit-appearance: none; appearance: none;
 }
@@ -459,13 +492,13 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
 #rail-lines { display: flex; flex-direction: column; gap: 9px; }
 .rail-row {
   border-radius: 15px; overflow: hidden;
-  background: rgba(243,233,216,.035); border: 1px solid rgba(243,233,216,.08);
+  background: rgba(var(--ink-rgb),.035); border: 1px solid rgba(var(--ink-rgb),.08);
   transition: background .2s, border-color .2s;
 }
-.rail-row:not(.sel):hover { background: rgba(243,233,216,.06); border-color: rgba(243,233,216,.16); }
+.rail-row:not(.sel):hover { background: rgba(var(--ink-rgb),.06); border-color: rgba(var(--ink-rgb),.16); }
 .rail-row-btn:active .rr-badge { transform: scale(.94); }
 .rr-badge { transition: transform .15s ease; }
-.rail-row.sel { background: rgba(243,233,216,.07); border-color: var(--cc); }
+.rail-row.sel { background: rgba(var(--ink-rgb),.07); border-color: var(--cc); }
 .rail-row-btn { width: 100%; text-align: left; display: flex; align-items: center; gap: 13px; padding: 13px 14px; }
 .rr-badge {
   width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0; background: var(--cc);
@@ -498,7 +531,7 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
 .rr-stop {
   display: flex; align-items: center; gap: 11px; padding: 7px 0; position: relative;
   width: 100%; text-align: left;
-  font: 400 13px/1 var(--font); color: rgba(243,233,216,.7);
+  font: 400 13px/1 var(--font); color: rgba(var(--ink-rgb),.7);
   transition: color .15s;
 }
 .rr-stop:not([disabled]):hover { color: var(--ink); }
@@ -528,11 +561,11 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
 .rail-empty { padding: 30px 16px; text-align: center; font: 400 13px/1.5 var(--font); opacity: .45; }
 #rail-detail {
   margin-bottom: 14px; border-radius: 16px; padding: 14px 16px;
-  background: rgba(26,20,12,.9); border: 1px solid var(--chrome-line);
+  background: rgba(var(--glass-rgb),.9); border: 1px solid var(--chrome-line);
   animation: zg-rise .32s cubic-bezier(.2,.8,.2,1);
 }
 .rail-foot {
-  flex-shrink: 0; padding: 13px 20px; border-top: 1px solid rgba(243,233,216,.07);
+  flex-shrink: 0; padding: 13px 20px; border-top: 1px solid rgba(var(--ink-rgb),.07);
   font: 400 11.5px/1.5 var(--font); opacity: .4;
 }
 
@@ -545,7 +578,7 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
 }
 #map-context .mc-pin { color: var(--accent); }
 #map-context b { font: 600 13.5px/1 var(--font); }
-.mc-div { width: 1px; height: 14px; background: rgba(243,233,216,.18); }
+.mc-div { width: 1px; height: 14px; background: rgba(var(--ink-rgb),.18); }
 #mc-sub { font: 500 12.5px/1 var(--font); opacity: .6; }
 #map-legend {
   display: none; position: absolute; left: 24px; bottom: 28px; z-index: 500;
