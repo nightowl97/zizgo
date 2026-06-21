@@ -978,6 +978,26 @@ function endpointsOf(LINE) {
     ].map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join("");
   }
 
+  // per-line structural facts: vehicles assigned + actual route length (sum of the
+  // geojson polyline, not the straight-line distance between termini). Both stay
+  // true no matter how much more telemetry is logged — no time-windowed counts.
+  const LINE_FACTS = {
+    l01: { buses: 4, km: "~24 km" },
+    l02: { buses: 2, km: "~25 km" },
+    l03: { buses: 2, km: "~21 km" },
+  };
+  function renderInfoFacts() {
+    const el = $("#info-lines");
+    if (!el) return;
+    el.innerHTML = LINES.map(L_ => {
+      const f = LINE_FACTS[L_.id] || {};
+      const meta = [f.buses && `${f.buses} bus`, f.km && `${f.km} de long`]
+        .filter(Boolean).join(" · ");
+      return `<div class="lf"><span class="lf-badge" style="background:${L_.color}">${L_.name}</span>
+        <div class="lf-main"><b>${endpointsOf(L_)}</b><span>${meta}</span></div></div>`;
+    }).join("");
+  }
+
   // ── tabs ──
   const tabs = { map: $("#screen-map"), lines: $("#screen-lines"), info: $("#screen-info") };
   function switchTab(name) {
@@ -988,6 +1008,11 @@ function endpointsOf(LINE) {
   }
   document.querySelectorAll("#bottom-nav button").forEach(b =>
     b.addEventListener("click", () => switchTab(b.dataset.tab)));
+
+  // desktop reaches the info screen from the rail; its close button returns to the map
+  renderInfoFacts();
+  $("#rail-info-btn")?.addEventListener("click", () => switchTab("info"));
+  $("#info-close")?.addEventListener("click", () => switchTab("map"));
 
   // desktop layout has no tabs; make sure the map screen is active when crossing the breakpoint
   const mqDesktop = window.matchMedia("(min-width: 1024px)");

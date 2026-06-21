@@ -1,5 +1,5 @@
 /* ZizGo service worker: app shell cached, live data always from network */
-const CACHE = "zizgo-v37";
+const CACHE = "zizgo-v42";
 const SHELL = [
   "./", "index.html",
   "css/app.css", "js/app.js",

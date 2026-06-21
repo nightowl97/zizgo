@@ -89,7 +89,10 @@
       <div class="rail-lines-head"><span>Lignes</span><span id="rail-total">0 bus actifs</span></div>
       <div id="rail-lines"></div>
     </div>
-    <div class="rail-foot">Positions GPS · rafraîchies toutes les 10 s</div>
+    <div class="rail-foot">
+      <span>Positions GPS · rafraîchies toutes les 10 s</span>
+      <button id="rail-info-btn" type="button">À propos &amp; données</button>
+    </div>
   </aside>
 
   <div id="screens">
@@ -168,6 +171,9 @@
 
     <!-- Infos -->
     <section id="screen-info" class="screen" hidden>
+      <button id="info-close" aria-label="Retour à la carte">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6 L18 18 M18 6 L6 18"/></svg>
+      </button>
       <div class="hero hero-sm">
         <div class="hero-img" style="background-image:url(assets/splash.webp); background-position:center 35%"></div>
         <div class="hero-scrim"></div>
@@ -177,15 +183,33 @@
         </div>
       </div>
       <div class="info-body">
-        <p class="lead">ZizGo suit en temps réel les bus d'Errachidia, d'un quartier à l'autre,
-        le long du Ziz. Pensé pour être consulté en quelques secondes, à l'arrêt comme dans le bus.</p>
+        <p class="lead">Suivez en direct les bus d'Errachidia, d'un quartier à l'autre.
+        Pensé pour être consulté en quelques secondes, à l'arrêt comme dans le bus.</p>
         <div id="info-stats" class="stats"></div>
-        <div class="eyebrow">L'identité</div>
-        <p class="muted">Le Ziz est un fil vert qui traverse l'ocre du désert. Le logo reprend ce geste :
-        une ligne sinueuse, à la fois rivière et trajet, ponctuée d'un arrêt vivant.
-        Disponible dans le navigateur et en application Android.</p>
+
+        <div class="eyebrow">Le réseau en chiffres</div>
+        <p class="muted">Au-delà du direct, les positions GPS embarquées, relevées toutes
+        les 10 secondes, dessinent le portrait réel du réseau.</p>
+        <div class="facts">
+          <div class="fact fact-lg">
+            <b>06 h – 23 h</b>
+            <span>le réseau en service</span>
+            <small>~17 h par jour, 7 j/7 — plus rien entre minuit et 5 h</small>
+          </div>
+          <div class="fact"><b>~1 h</b><span>entre deux bus</span><small>attente typique, avec une longue traîne</small></div>
+          <div class="fact"><b>~60 min</b><span>un trajet complet</span><small>d'un terminus à l'autre</small></div>
+          <div class="fact"><b>~22 km</b><span>par trajet</span><small>à sens unique</small></div>
+          <div class="fact"><b>~20 km/h</b><span>en circulation</span><small>vitesse moyenne, hors arrêts</small></div>
+          <div class="fact"><b>~4 min</b><span>d'arrêt au terminus</span><small>~1 min aux arrêts intermédiaires</small></div>
+          <div class="fact"><b>6</b><span>véhicules</span><small>pour les trois lignes du réseau</small></div>
+        </div>
+
+        <div class="eyebrow">Par ligne</div>
+        <div id="info-lines" class="line-facts"></div>
+
         <div class="eyebrow">Les données</div>
         <p class="muted">Positions mises à jour toutes les 10 secondes via les balises GPS embarquées.
+        Hors terminus, les arrêts les plus fréquentés sont Gare Routière, Marché et CHU.
         Horaires donnés à titre indicatif.</p>
         <div class="info-footer">
           <span>ZizGo</span>
