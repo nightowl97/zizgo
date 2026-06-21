@@ -39,11 +39,15 @@ function snapToLine(pts, lat, lng) {
 }
 
 // ── time helpers ────────────────────────────────────────────────────────────
-function gpsAge(utcStr) {
+function gpsTimeMs(utcStr) {
   // API timestamps are UTC, e.g. "2026-06-11 14:03:22"
   if (!utcStr) return null;
   const t = Date.parse(utcStr.replace(" ", "T") + (utcStr.endsWith("Z") ? "" : "Z"));
-  if (isNaN(t)) return null;
+  return isNaN(t) ? null : t;
+}
+function gpsAge(utcStr) {
+  const t = gpsTimeMs(utcStr);
+  if (t == null) return null;
   return Math.max(0, Math.round((Date.now() - t) / 1000));
 }
 function ageLabel(s) {
@@ -414,7 +418,13 @@ function endpointsOf(LINE) {
   // rendered twice: floating card on mobile, rail detail card on desktop
   const callout = $("#bus-callout");
   const railDetail = $("#rail-detail");
-  function showCallout(LINE, b) {
+  // estimated ground speed, from the most recent inter-fix interval (see ingestFix).
+  // "-" until a 2nd fix establishes it; resets after a direction reversal.
+  function speedLabel(m) {
+    if (!m || m._speedKmh == null) return "-";
+    return `≈ ${Math.round(m._speedKmh)}`;
+  }
+  function showCallout(LINE, b, m) {
     const dirLabel = LINE.sensDirMap?.[String(b.sens)] ?? `sens ${b.sens}`;
     const age = gpsAge(b.src_updated_at);
     const html = `
@@ -428,6 +438,8 @@ function endpointsOf(LINE) {
       <div class="co-stats">
         <span class="co-stat"><b style="color:${LINE.color}">Bus ${b.bus}</b><small>véhicule</small></span>
         <span class="co-div"></span>
+        <span class="co-stat"><b data-bus-speed>${speedLabel(m)}</b><small>km/h</small></span>
+        <span class="co-div"></span>
         <span class="co-stat"><b data-gps-age>${ageLabel(age)}</b><small>position GPS</small></span>
       </div>`;
     for (const el of [callout, railDetail]) {
@@ -439,15 +451,20 @@ function endpointsOf(LINE) {
     }
     railDetail.style.borderColor = LINE.color;
     calloutGpsRef = b.src_updated_at;
+    calloutMarker = m;
   }
-  function hideCallout() { callout.hidden = true; railDetail.hidden = true; calloutGpsRef = null; }
+  function hideCallout() { callout.hidden = true; railDetail.hidden = true; calloutGpsRef = null; calloutMarker = null; }
 
-  // tick the "position GPS" age every second while a bus card is open
+  // tick the open bus card every second: GPS age counts up, speed tracks the
+  // latest velocity estimate (which only changes on a fix, but keep them in sync)
   let calloutGpsRef = null;
+  let calloutMarker = null;
   setInterval(() => {
     if (calloutGpsRef == null) return;
-    const label = ageLabel(gpsAge(calloutGpsRef));
-    document.querySelectorAll("[data-gps-age]").forEach(el => { el.textContent = label; });
+    const age = ageLabel(gpsAge(calloutGpsRef));
+    const spd = speedLabel(calloutMarker);
+    document.querySelectorAll("[data-gps-age]").forEach(el => { el.textContent = age; });
+    document.querySelectorAll("[data-bus-speed]").forEach(el => { el.textContent = spd; });
   }, 1000);
 
   // ── live polling ──
@@ -468,55 +485,92 @@ function endpointsOf(LINE) {
     });
   }
 
-  // smooth marker movement between GPS fixes
-  const SLIDE_MS = 5000;
-  // Leaflet rounds layer points to whole pixels, so slow tweens stair-step;
+  // ── smooth marker movement: interpolation with a render delay ──
+  // Extrapolating (predicting ahead at an estimated speed) overshoots whenever a
+  // bus slows or stops: the decaying velocity keeps pushing the marker forward,
+  // the next fix yanks it back, and it oscillates. Instead we render slightly in
+  // the PAST — each marker replays the path between its last two real fixes. The
+  // marker therefore lags the bus by ~one update and NEVER passes a position the
+  // bus hasn't actually reached; a stopped bus sits perfectly still. People
+  // expect a little lag in live tracking, so trailing reads as natural.
+  const PREFERS_MOTION = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // how far in the past to render. ≈ one fix interval so we're always interpolating
+  // between two fixes we already have. 0 = snap to each fix (reduced-motion).
+  const INTERP_DELAY_MS = PREFERS_MOTION ? REFRESH_MS : 0;
+  const SNAP_DEG = 0.02;       // lat+lng delta beyond which we hard-snap (reassigned vehicle / GPS gap)
+  const DEG_TO_KM = 111;       // km per degree of latitude (≈ at Errachidia)
+
+  // Leaflet rounds layer points to whole pixels, so slow motion stair-steps;
   // re-apply the icon transform with the unrounded projection for sub-pixel motion
   function setLatLngSubpixel(m, lat, lng) {
     m.setLatLng([lat, lng]); // keeps Leaflet's internal state (zoom redraws, events)
     if (m._icon)
       L.DomUtil.setPosition(m._icon, map.project([lat, lng])._subtract(map.getPixelOrigin()));
   }
-  function slideMarkerTo(m, lineId, dir, toPos) {
-    if (m._slideRaf) cancelAnimationFrame(m._slideRaf);
-    const from = m.getLatLng();
-    // don't tween implausible jumps (vehicle reassigned, long GPS gap)
-    if (Math.abs(toPos.lat - from.lat) + Math.abs(toPos.lng - from.lng) > 0.02) {
-      m.setLatLng([toPos.lat, toPos.lng]);
-      m._busPosCur = toPos;
-      if (activeSelection?.busKey === m._busKey) updateSplit(toPos, true);
-      return;
-    }
-    const start = performance.now();
+
+  // fold a new GPS fix into a marker's sample buffer (last 3 fixes, oldest first)
+  function ingestFix(m, lineId, dir, pos, gtMs) {
     const lp = lineProg[lineId]?.[dir];
-    if (lp) {
-      // tween distance-along-route, not lat/lng: the marker follows curves
-      // instead of cutting across them, and the past/future split rides along
-      const fromProg = lp.progressOf(snapToLine(lp.pts, from.lat, from.lng));
-      const toProg = lp.progressOf(toPos);
-      m._busPosCur = pointAtProgress(lp, fromProg);
-      const step = now => {
-        const k = Math.min(1, (now - start) / SLIDE_MS);
-        const e = k * k * (3 - 2 * k); // smoothstep
-        const p = k < 1 ? pointAtProgress(lp, fromProg + (toProg - fromProg) * e) : toPos;
-        setLatLngSubpixel(m, p.lat, p.lng);
-        m._busPosCur = p;
-        if (activeSelection?.busKey === m._busKey) updateSplit(p, k >= 1);
-        m._slideRaf = k < 1 ? requestAnimationFrame(step) : null;
-      };
-      m._slideRaf = requestAnimationFrame(step);
+    const from = m.getLatLng();
+    const jump = Math.abs(pos.lat - from.lat) + Math.abs(pos.lng - from.lng) > SNAP_DEG;
+    const rt = performance.now();
+    // no route table, implausible jump, or direction reversal (progress is
+    // per-direction, so its coordinate frame changed): drop history and hard-snap
+    if (!lp || jump || m._busDir !== dir || !m._buf) {
+      m._lp = lp || null;
+      m._busDir = dir;
+      m._speedKmh = null;
+      if (lp) {
+        const prog = lp.progressOf(pos);
+        m._buf = [{ prog, rt }];
+        m._dispProg = prog;
+        m._busPosCur = pointAtProgress(lp, prog);
+      } else {
+        m._buf = null;
+        m._busPosCur = pos;
+      }
+      setLatLngSubpixel(m, pos.lat, pos.lng);
       return;
     }
-    // no progress table for this direction: straight tween fallback
-    const step = now => {
-      const k = Math.min(1, (now - start) / SLIDE_MS);
-      const e = k * k * (3 - 2 * k); // smoothstep
-      setLatLngSubpixel(m, from.lat + (toPos.lat - from.lat) * e, from.lng + (toPos.lng - from.lng) * e);
-      if (k >= 1) m._busPosCur = toPos;
-      m._slideRaf = k < 1 ? requestAnimationFrame(step) : null;
-    };
-    m._slideRaf = requestAnimationFrame(step);
+    const prog = lp.progressOf(pos);
+    const last = m._buf[m._buf.length - 1];
+    if (gtMs != null && last.gt === gtMs) return; // same beacon reading returned again
+    // displayed speed: just the most recent interval, no averaging (so it drops to
+    // ~0 immediately when the bus stops instead of decaying)
+    if (gtMs != null && last.gt != null && gtMs > last.gt) {
+      const dtSec = (gtMs - last.gt) / 1000;
+      if (dtSec > 0.5) m._speedKmh = Math.abs(prog - last.prog) / dtSec * DEG_TO_KM * 3600;
+    }
+    m._buf.push({ prog, rt, gt: gtMs });
+    if (m._buf.length > 3) m._buf.shift();
   }
+
+  // one loop drives every marker: place it at the interpolated past position
+  function tickMarkers(now) {
+    const renderT = now - INTERP_DELAY_MS;
+    for (const [key, m] of busMarkers) {
+      const lp = m._lp, buf = m._buf;
+      if (!lp || !buf || !buf.length) continue;
+      let prog;
+      if (buf.length === 1 || renderT <= buf[0].rt) {
+        prog = buf[0].prog;
+      } else if (renderT >= buf[buf.length - 1].rt) {
+        prog = buf[buf.length - 1].prog;   // caught up to the newest fix: hold (lag, never overshoot)
+      } else {
+        let i = 0;
+        while (i < buf.length - 1 && buf[i + 1].rt < renderT) i++;
+        const a = buf[i], b = buf[i + 1];
+        prog = a.prog + (b.prog - a.prog) * ((renderT - a.rt) / (b.rt - a.rt));
+      }
+      m._dispProg = prog;
+      const p = pointAtProgress(lp, prog);
+      setLatLngSubpixel(m, p.lat, p.lng);
+      m._busPosCur = p;
+      if (activeSelection?.busKey === key) updateSplit(p);
+    }
+    requestAnimationFrame(tickMarkers);
+  }
+  requestAnimationFrame(tickMarkers);
 
   async function refresh() {
     let total = 0, anyErr = false, minAge = null;
@@ -538,22 +592,27 @@ function endpointsOf(LINE) {
           seen.add(key);
           const dir = sensDir(b.sens);
           const pos = snapToLine(routePts[LINE.id]?.[dir], b.lat, b.lng);
+          const gt = gpsTimeMs(b.src_updated_at);
           const ll = L.latLng(pos.lat, pos.lng);
 
           if (busMarkers.has(key)) {
             const m = busMarkers.get(key);
-            m._busPos = pos; m._busDir = dir; m._busData = b;
-            slideMarkerTo(m, LINE.id, dir, pos);
+            m._busPos = pos; m._busData = b;
+            // ingestFix updates m._busDir (it needs the previous one to spot reversals)
+            ingestFix(m, LINE.id, dir, pos, gt);
           } else {
             const m = L.marker(ll, { icon: busIcon(LINE.color, LINE.colorRgb), zIndexOffset: 1000 }).addTo(map);
             m._busPos = pos; m._busDir = dir; m._busData = b;
             m._busKey = key; m._busPosCur = pos;
+            m._buf = null; m._lp = null; m._speedKmh = null;
+            ingestFix(m, LINE.id, dir, pos, gt); // seeds the sample buffer
             m.on("click", e => {
               L.DomEvent.stopPropagation(e);
               activeSelection = { busKey: key, lineId: LINE.id };
               selectedLineId = LINE.id;
+              setSheet(false); // collapse the line list so the callout has room
               selectLine(LINE.id, m._busDir, m._busPosCur ?? m._busPos);
-              showCallout(LINE, m._busData);
+              showCallout(LINE, m._busData, m);
               syncChips(); syncSheetHead();
             });
             busMarkers.set(key, m);
@@ -562,7 +621,6 @@ function endpointsOf(LINE) {
 
         for (const [key, m] of busMarkers)
           if (key.startsWith(`${LINE.id}:`) && !seen.has(key)) {
-            if (m._slideRaf) cancelAnimationFrame(m._slideRaf);
             map.removeLayer(m);
             busMarkers.delete(key);
             railBusY.delete(key);
@@ -575,7 +633,7 @@ function endpointsOf(LINE) {
       if (m) {
         selectLine(activeSelection.lineId, m._busDir, m._busPosCur ?? m._busPos);
         const LINE = LINES.find(L_ => L_.id === activeSelection.lineId);
-        if (LINE) showCallout(LINE, m._busData);
+        if (LINE) showCallout(LINE, m._busData, m);
       } else resetSelection();
     }
 
@@ -614,9 +672,27 @@ function endpointsOf(LINE) {
     if (openedStopMarker) openedStopMarker.openTooltip();
   }
 
-  // live bus dots inside the expanded stop list
-  const railBusY = new Map(); // busKey → last rendered y, so re-renders glide instead of jump
-  function placeRailBuses(LINE, inner) {
+  // shared station-list markup (desktop rail row + mobile bottom sheet)
+  function buildStopList(LINE, container) {
+    const stations = LINE.stations || [];
+    container.style.setProperty("--cc", LINE.color);
+    container.innerHTML = `<div class="rr-stops-inner">${stations.map((s, i) => {
+      const term = i === 0 || i === stations.length - 1;
+      const pos = stationPos.get(s);
+      return `<button class="rr-stop${term ? " terminus" : ""}" data-stop="${s}"${pos ? "" : " disabled"}><span class="dot"></span><span>${s}</span>${term ? '<span class="rr-term-tag">terminus</span>' : ""}</button>`;
+    }).join("")}</div>`;
+    container.querySelectorAll(".rr-stop:not([disabled])").forEach(stopBtn => {
+      stopBtn.addEventListener("click", () => { focusStation(stopBtn.dataset.stop); setSheet(false); });
+    });
+    return container.querySelector(".rr-stops-inner");
+  }
+
+  // live bus dots inside an expanded stop list. ns namespaces the y-memory so the
+  // desktop rail and the mobile sheet (different layouts) don't fight over it.
+  const railBusY = new Map(); // `${ns}:${busKey}` → last rendered y, so re-renders glide
+  function placeRailBuses(LINE, inner, ns) {
+    if (!inner || inner.offsetParent === null) return; // hidden: offsets would all read 0
+    inner.querySelectorAll(".rr-bus").forEach(d => d.remove()); // refresh dots on a stable list
     const stopEls = inner.querySelectorAll(".rr-stop");
     if (!stopEls.length) return;
     const centerY = el => el.offsetTop + el.offsetHeight / 2;
@@ -628,14 +704,15 @@ function endpointsOf(LINE) {
       const y = yi + (centerY(stopEls[place.j]) - yi) * place.f;
       const dot = document.createElement("span");
       dot.className = "rr-bus";
-      const prev = railBusY.get(key);
+      const yKey = `${ns}:${key}`;
+      const prev = railBusY.get(yKey);
       dot.style.top = `${prev ?? y}px`;
       inner.appendChild(dot);
       if (prev != null && Math.abs(prev - y) > 0.5) {
         void dot.offsetTop; // commit the start position so the transition runs
         dot.style.top = `${y}px`;
       }
-      railBusY.set(key, y);
+      railBusY.set(yKey, y);
     }
   }
 
@@ -691,20 +768,13 @@ function endpointsOf(LINE) {
           // .anim clips overflow while unfolding, which would keep shaving the
           // left edge off the bus dots; drop it once the animation is done
           wrap.addEventListener("animationend", () => wrap.classList.remove("anim"), { once: true });
-        wrap.innerHTML = `<div class="rr-stops-inner">${stations.map((s, i) => {
-          const term = i === 0 || i === stations.length - 1;
-          const pos = stationPos.get(s);
-          return `<button class="rr-stop${term ? " terminus" : ""}" data-stop="${s}"${pos ? "" : " disabled"}><span class="dot"></span><span>${s}</span>${term ? '<span class="rr-term-tag">terminus</span>' : ""}</button>`;
-        }).join("")}</div>`;
-        wrap.querySelectorAll(".rr-stop:not([disabled])").forEach(stopBtn => {
-          stopBtn.addEventListener("click", () => focusStation(stopBtn.dataset.stop));
-        });
+        const inner = buildStopList(LINE, wrap);
         row.appendChild(wrap);
-        expanded = { LINE, inner: wrap.querySelector(".rr-stops-inner") };
+        expanded = { LINE, inner };
       }
       railLinesEl.appendChild(row);
     });
-    if (expanded) placeRailBuses(expanded.LINE, expanded.inner); // rows are in the DOM now
+    if (expanded) placeRailBuses(expanded.LINE, expanded.inner, "rail"); // rows are in the DOM now
     lastExpandedId = selectedLineId;
   }
 
@@ -718,9 +788,30 @@ function endpointsOf(LINE) {
 
   // ── bottom sheet chips ──
   const chipsEl = $("#line-chips");
+
+  // mobile equivalent of the desktop rail's expanded row: the selected line's
+  // station list with live bus dots, shown when the sheet is dragged open
+  const sheetStopsEl = $("#sheet-stops");
+  let sheetStopsLineId = null;
+  function renderSheetStops() {
+    if (!selectedLineId) {
+      sheetStopsEl.innerHTML = `<div class="rail-empty">Choisissez une ligne pour voir ses arrêts et les bus en direct.</div>`;
+      sheetStopsLineId = null;
+      return;
+    }
+    const LINE = LINES.find(L_ => L_.id === selectedLineId);
+    // rebuild only when the line changes, so the list keeps its scroll across refreshes
+    if (sheetStopsLineId !== selectedLineId) {
+      buildStopList(LINE, sheetStopsEl);
+      sheetStopsLineId = selectedLineId;
+    }
+    placeRailBuses(LINE, sheetStopsEl.querySelector(".rr-stops-inner"), "sheet");
+  }
+
   function syncChips() {
     renderRail();
     renderLegend();
+    renderSheetStops();
     const keepX = chipsEl.scrollLeft, keepY = chipsEl.scrollTop;
     chipsEl.innerHTML = "";
     LINES.forEach(LINE => {
@@ -733,7 +824,8 @@ function endpointsOf(LINE) {
         <span class="chip-text"><b>${endpointsOf(LINE)}</b>
         <small>${liveCounts[LINE.id]} bus en direct · ${(LINE.stations || []).length} arrêts</small></span>`;
       btn.addEventListener("click", () => {
-        setSheet(false); // give the map back after picking a line
+        // keep the sheet as-is: collapsed shows the route on the map, expanded
+        // reveals this line's stops below — no forced collapse
         if (sel) { resetSelection(); return; }
         activeSelection = null; hideCallout();
         selectedLineId = LINE.id;
@@ -751,7 +843,7 @@ function endpointsOf(LINE) {
     if (selectedLineId) {
       const LINE = LINES.find(L_ => L_.id === selectedLineId);
       $("#sheet-title").textContent = `${LINE.name} · ${endpointsOf(LINE)}`;
-      $("#sheet-sub").textContent = "Toucher la carte pour tout voir";
+      $("#sheet-sub").textContent = sheet.classList.contains("expanded") ? "Arrêts et bus en direct" : "Glisser pour les arrêts";
       $("#mc-sub").textContent = `${LINE.name} · ${endpointsOf(LINE)}`;
     } else {
       $("#sheet-title").textContent = `${LINES.length} lignes en service`;
@@ -767,7 +859,11 @@ function endpointsOf(LINE) {
 
   // ── bottom sheet: drag/tap to expand, wheel to scroll chips ──
   const sheet = $("#bottom-sheet");
-  function setSheet(open) { sheet.classList.toggle("expanded", open); }
+  function setSheet(open) {
+    sheet.classList.toggle("expanded", open);
+    if (open) renderSheetStops(); // place bus dots now the list has real layout
+    syncSheetHead();              // sub-hint depends on expanded state
+  }
   for (const el of [sheet.querySelector(".sheet-handle"), sheet.querySelector(".sheet-head")]) {
     let startY = null;
     el.addEventListener("pointerdown", e => {

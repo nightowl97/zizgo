@@ -304,6 +304,8 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
   animation: zg-rise .32s cubic-bezier(.2,.8,.2,1);
 }
 #bus-callout[hidden] { display: none; }
+/* callout and an expanded line list both anchor to the bottom; never show both */
+#screen-map:has(#bottom-sheet.expanded) #bus-callout { display: none; }
 .co-head { display: flex; align-items: center; gap: 11px; }
 .co-badge {
   width: 34px; height: 34px; border-radius: 11px; flex-shrink: 0;
@@ -316,10 +318,11 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
   background: var(--ink-08); border-radius: 9px; width: 30px; height: 30px;
   display: grid; place-items: center; flex-shrink: 0;
 }
-.co-stats { display: flex; gap: 18px; margin-top: 13px; align-items: center; }
-.co-stat b { display: block; font: 700 20px/1 var(--font); }
+.co-stats { display: flex; gap: 13px; margin-top: 13px; align-items: center; }
+.co-stat { min-width: 0; }
+.co-stat b { display: block; font: 700 18px/1 var(--font); white-space: nowrap; }
 .co-stat small { display: block; font: 400 11px/1 var(--font); opacity: .55; margin-top: 4px; }
-.co-div { width: 1px; height: 30px; background: var(--ink-12); }
+.co-div { width: 1px; height: 30px; background: var(--ink-12); flex-shrink: 0; }
 
 /* ── bottom sheet (line chips) ────────────────────── */
 #bottom-sheet {
@@ -340,11 +343,29 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
   display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px;
   cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
 }
-#bottom-sheet.expanded .line-chips {
-  flex-direction: column; overflow-x: hidden; overflow-y: auto;
-  max-height: min(48dvh, 360px); overscroll-behavior: contain;
+/* selected line's station list + live buses, revealed when the sheet is expanded.
+   chips stay a horizontal selector at the top; the stop list is the main content.
+   animated via max-height (not display) so dragging the sheet open grows smoothly.
+   the station lists are taller than the cap, so max-height eases cleanly with no
+   "snap" at the end; reduced-motion users get the global instant override. */
+#sheet-stops {
+  max-height: 0; opacity: 0; overflow: hidden;
+  margin-top: 0; padding: 0 4px 0 18px;
+  border-top: 1px solid transparent;
+  transition: max-height .4s cubic-bezier(.2,.8,.2,1),
+              opacity .3s ease,
+              margin-top .4s cubic-bezier(.2,.8,.2,1),
+              padding .4s cubic-bezier(.2,.8,.2,1),
+              border-color .3s ease;
+  scrollbar-width: none;
 }
-#bottom-sheet.expanded .chip { width: 100%; }
+#bottom-sheet.expanded #sheet-stops {
+  max-height: min(48dvh, 400px); opacity: 1;
+  margin-top: 8px; padding: 8px 4px 4px 18px;
+  border-top-color: var(--chrome-line);
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+}
+#sheet-stops::-webkit-scrollbar { width: 0; }
 #sheet-title { font: 600 14.5px/1 var(--font); }
 #sheet-sub { font: 500 12px/1 var(--font); opacity: .55; }
 .line-chips {
