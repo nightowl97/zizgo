@@ -119,7 +119,7 @@ function endpointsOf(LINE) {
     };
     baseTiles = L.tileLayer(tileUrl(t.base), {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
     }).addTo(map);
     // labels only when zoomed in: at overview zooms the big city-name label
     // is redundant (it's baked into the raster tiles, so it can't be removed selectively)
@@ -129,6 +129,9 @@ function endpointsOf(LINE) {
       : null;
     baseTiles.once("load", cleanup);
     setTimeout(cleanup, 2500); // fallback if tiles never finish (offline)
+    // match the PWA/browser chrome (status bar) to the active theme
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = theme === "dark" ? "#141009" : "#e6dac2";
     localStorage.setItem("zizgo-theme", theme);
   }
   applyTheme(mapTheme);
@@ -293,6 +296,18 @@ function endpointsOf(LINE) {
   }
   map.on("click", resetSelection);
 
+  // select a whole line (no specific bus) and reflect it everywhere. fit=false
+  // when the trigger is a tap on the route itself (don't yank the viewport).
+  function chooseLine(LINE, fit = true) {
+    activeSelection = null;
+    hideCallout();
+    selectedLineId = LINE.id;
+    selectLine(LINE.id, null);
+    if (fit) fitLine(LINE);
+    syncChips();
+    syncSheetHead();
+  }
+
   // ── load routes + stops ──
   const stationLines = new Map();
   for (const LINE of LINES)
@@ -316,10 +331,7 @@ function endpointsOf(LINE) {
         const route  = L.geoJSON(gj, { style: routeStyle(7, initOpacity, LINE.color) }).addTo(map);
         route.on("click", e => {
           L.DomEvent.stopPropagation(e);
-          activeSelection = null; hideCallout();
-          selectedLineId = LINE.id;
-          selectLine(LINE.id, null);
-          syncChips(); syncSheetHead();
+          chooseLine(LINE, false); // tapped the route itself: keep the viewport
         });
         routeLayers[LINE.id][dir] = [shadow, route];
       } catch {}
@@ -751,14 +763,7 @@ function endpointsOf(LINE) {
         <span class="rr-arrow">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12 H19 M13 6 L19 12 L13 18"/></svg>
         </span>`;
-      btn.addEventListener("click", () => {
-        if (sel) { resetSelection(); return; }
-        activeSelection = null; hideCallout();
-        selectedLineId = LINE.id;
-        selectLine(LINE.id, null);
-        fitLine(LINE);
-        syncChips(); syncSheetHead();
-      });
+      btn.addEventListener("click", () => sel ? resetSelection() : chooseLine(LINE));
       row.appendChild(btn);
 
       if (sel && stations.length) {
@@ -823,16 +828,9 @@ function endpointsOf(LINE) {
         <span class="chip-badge">${LINE.name}</span>
         <span class="chip-text"><b>${endpointsOf(LINE)}</b>
         <small>${liveCounts[LINE.id]} bus en direct · ${(LINE.stations || []).length} arrêts</small></span>`;
-      btn.addEventListener("click", () => {
-        // keep the sheet as-is: collapsed shows the route on the map, expanded
-        // reveals this line's stops below — no forced collapse
-        if (sel) { resetSelection(); return; }
-        activeSelection = null; hideCallout();
-        selectedLineId = LINE.id;
-        selectLine(LINE.id, null);
-        fitLine(LINE);
-        syncChips(); syncSheetHead();
-      });
+      // keep the sheet as-is: collapsed shows the route on the map, expanded
+      // reveals this line's stops below — no forced collapse
+      btn.addEventListener("click", () => sel ? resetSelection() : chooseLine(LINE));
       chipsEl.appendChild(btn);
     });
     chipsEl.scrollLeft = keepX;
@@ -947,14 +945,7 @@ function endpointsOf(LINE) {
         <span class="lc-arrow">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12 H19 M13 6 L19 12 L13 18"/></svg>
         </span>`;
-      card.addEventListener("click", () => {
-        activeSelection = null; hideCallout();
-        selectedLineId = LINE.id;
-        selectLine(LINE.id, null);
-        fitLine(LINE);
-        syncChips(); syncSheetHead();
-        switchTab("map");
-      });
+      card.addEventListener("click", () => { chooseLine(LINE); switchTab("map"); });
       cardsEl.appendChild(card);
     });
     const note = document.createElement("div");

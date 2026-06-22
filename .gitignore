@@ -11,5 +11,8 @@ Desktop.ini
 # original full-res splash source (30MB; the app uses assets/splash.webp)
 assets/splash.png
 
+# data-analysis notebook (references a local history.jsonl; stats are baked into the app)
+_stats.ipynb
+
 # logs
 *.log

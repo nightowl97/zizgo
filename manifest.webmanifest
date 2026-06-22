@@ -1,7 +1,7 @@
 {
   "name": "ZizGo - Bus d'Errachidia en direct",
   "short_name": "ZizGo",
-  "description": "Suivez les bus d'Errachidia en temps réel, le long du Ziz.",
+  "description": "Suivez les bus d'Errachidia en temps réel, d'un quartier à l'autre.",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",

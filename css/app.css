@@ -372,7 +372,7 @@ body.dark-map .leaflet-control-attribution a { color: #93a0ad !important; }
   display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 6px 16px 2px;
   scrollbar-width: none;
   cursor: grab; user-select: none; -webkit-user-select: none;
-  max-height: 84px; transition: max-height .35s cubic-bezier(.2,.8,.2,1);
+  max-height: 84px;
 }
 .line-chips.dragging { cursor: grabbing; }
 .line-chips.dragging .chip { pointer-events: none; }
