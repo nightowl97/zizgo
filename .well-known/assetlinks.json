@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "net.zizgo.app",
+      "sha256_cert_fingerprints": [
+        "B5:6D:FA:68:B9:63:D5:29:CD:01:A2:4C:F4:80:7E:B9:E9:04:29:5F:A8:A0:D0:68:22:11:B1:C7:A9:1E:06:9C"
+      ]
+    }
+  }
+]

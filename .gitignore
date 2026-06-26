@@ -16,3 +16,14 @@ _stats.ipynb
 
 # logs
 *.log
+
+# Android / TWA (Bubblewrap) — never commit the signing key or build output
+android.keystore
+*.keystore
+*.jks
+local.properties
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
