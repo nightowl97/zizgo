@@ -27,3 +27,4 @@ build/
 app/build/
 *.apk
 *.aab
+*.idsig
